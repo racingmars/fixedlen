@@ -1,30 +1,28 @@
 package fixedlen
 
 import "reflect"
-import "fmt"
 import "bytes"
+import "strconv"
 
-func Marshal(in interface{}) string {
-	t := reflect.TypeOf(in)
-	if t.Kind() == reflect.Struct {
-		fmt.Println("It's a struct.")
-		printInfo(in, t)
-	} else {
-		fmt.Println("It's not a struct.")
-	}
-	return t.Name()
-}
-
-func printInfo(in interface{}, t reflect.Type) {
+func Encode(in interface{}) []byte {
 	var b bytes.Buffer
-	cnt := t.NumField()
-	fmt.Println("Field count:", cnt)
-	for i := 0; i < cnt; i++ {
-		fld := t.Field(i)
-		fmt.Println("Field name:", fld.Name, "Tag:", fld.Tag.Get("fw"))
-		b.WriteString(asString(t.Field(i).Type, reflect.ValueOf(in).Field(i), 10))
+
+	t := reflect.TypeOf(in)
+	if t.Kind() != reflect.Struct {
+		return []byte("not struct")
 	}
-	fmt.Println(b.String())
+	v := reflect.ValueOf(in)
+
+	cnt := t.NumField()
+	for i := 0; i < cnt; i++ {
+		fldt := t.Field(i)
+		fldv := v.Field(i)
+		len, _ := strconv.Atoi(fldt.Tag.Get("fw"))
+		// TODO: what if there isn't a length tag?
+		b.WriteString(asString(fldt.Type, fldv, len))
+	}
+
+	return b.Bytes()
 }
 
 func asString(t reflect.Type, v reflect.Value, len int) string {
@@ -38,9 +36,31 @@ func asString(t reflect.Type, v reflect.Value, len int) string {
 			s = "F"
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		s = "NUMBER"
+		s = strconv.FormatInt(v.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32,
+		reflect.Uint64, reflect.Uintptr:
+		s = strconv.FormatUint(v.Uint(), 10)
+	case reflect.Float32:
+		s = strconv.FormatFloat(v.Float(), 'g', -1, 32)
+	case reflect.Float64:
+		s = strconv.FormatFloat(v.Float(), 'g', -1, 64)
+	case reflect.String:
+		s = v.String()
 	default:
 		s = "UNKNOWN"
 	}
-	return s
+
+	return padString(s, len)
+}
+
+func padString(s string, l int) string {
+	if i := l - len(s); i > 0 {
+		pad := ""
+		for j := 0; j < i; j++ {
+			pad += " "
+		}
+		return s + pad
+	} else {
+		return s
+	}
 }
